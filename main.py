@@ -84,31 +84,31 @@ Thought: {agent_scratchpad}
     # print(res)
 
     # output parser creates the object of AgentAction or AgentFinish
+
+    agent_step = ""
+    while not isinstance(agent_step, AgentFinish):
+        # agent_step = agent.invoke(
+        #     {
+        #         "input": "What is the text length of the string DOG in characters? ",
+        #         "agent_scratchpad": intermediate_steps
+        #     }
+        # )
+        agent_step: Union[AgentAction, AgentFinish] = agent.invoke(
+            {
+                "input": "What is the text length of the string DOG in characters? ",
+                "agent_scratchpad": intermediate_steps
+            }
+        )
+        print(f"Agent step in while loop: {agent_step}")
+        if isinstance(agent_step, AgentAction):
+            tool_name = agent_step.tool
+            tool = find_tool_by_name(tool_name, tools)
+            tool_input = agent_step.tool_input
+            observation = tool.func(str(tool_input))
+            print(f"Observation: {observation}")
+            intermediate_steps.append((agent_step, str(observation)))
+
     
-    agent_step: Union[AgentAction, AgentFinish] = agent.invoke(
-        {
-            "input": "What is the text length of the string DOG in characters? ",
-            "agent_scratchpad": intermediate_steps
-        }
-    )
-    print(f"Agent first step: {agent_step}")
-    # prints : tool='get_text_length' tool_input="'DOG'" log="I should use the get_text_length function to determine the length of the text 'DOG'.\nAction: get_text_length\nAction Input: 'DOG'"
-    
-    if isinstance(agent_step, AgentAction):
-        tool_name = agent_step.tool
-        tool = find_tool_by_name(tool_name, tools)
-        tool_input = agent_step.tool_input
-        
-        observation = tool.func(str(tool_input))
-        print(f"Observation: {observation}")
-        intermediate_steps.append((agent_step, str(observation)))
-    
-    agent_step: Union[AgentAction, AgentFinish] = agent.invoke(
-        {
-            "input": "What is the text length of the string DOG in characters? ",
-            "agent_scratchpad": intermediate_steps
-        }
-    )
-    
+
     if(isinstance(agent_step, AgentFinish)):
         print(f"Agent finished with the final answer: {agent_step.return_values}")
