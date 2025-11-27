@@ -131,8 +131,9 @@ while not isinstance(agent_step, AgentFinish):
 1. **Prompt Template**: Structures the agent's reasoning format ([source template from LangSmith Hub](https://smith.langchain.com/hub/hwchase17/react?organizationId=d924c6d5-9297-4b9b-9cdb-df9eea6b95a7) by [Harrison Chase](https://blog.langchain.com/author/harrison/), creator of LangChain)
 2. **Tools**: Functions the agent can call (e.g., `get_text_length`)
 3. **Output Parser**: Parses LLM output into `AgentAction` or `AgentFinish`
-4. **Scratchpad**: Maintains history of thoughts and observations
-5. **Callback Handler**: Monitors LLM interactions for debugging
+4. **Intermediate Steps**: List of tuples `(agent_step, observation)` that maintains the agent's memory and prevents redundant tool calls
+5. **Scratchpad**: Formatted string representation of intermediate steps, inserted into the prompt for context
+6. **Callback Handler**: Monitors LLM interactions for debugging
 
 ### Understanding "Observation" and Stop Tokens
 
@@ -191,6 +192,68 @@ llm = ChatOpenAI(
 - **Maintains Trust**: The agent only acts on real data, not fabricated results
 
 This mechanism is what makes ReAct agents reliable - they think and plan (LLM), but only observe real results (tool execution).
+
+### The Role of `intermediate_steps`
+
+The `intermediate_steps` variable is crucial for maintaining the agent's memory and preventing redundant tool calls.
+
+#### What is `intermediate_steps`?
+
+`intermediate_steps` is a list of tuples, where each tuple contains:
+```python
+(agent_step, observation)
+```
+
+- **agent_step**: An `AgentAction` object containing the action taken (tool name and input)
+- **observation**: The result returned by the tool
+
+#### Why is it Important?
+
+1. **Maintains Agent Memory**: Stores the history of all actions and their results during the reasoning process
+
+2. **Prevents Redundant Calls**: By keeping track of previous actions, the agent can see what it has already tried and avoid making the same tool call multiple times
+
+3. **Enables Context-Aware Decisions**: The agent can reason about previous observations to make better decisions in subsequent steps
+
+#### Example Flow
+
+```python
+intermediate_steps = []  # Start with empty history
+
+# First iteration
+agent_step = AgentAction(tool='get_text_length', tool_input='DOG', log='...')
+observation = '3'
+intermediate_steps.append((agent_step, observation))
+# intermediate_steps = [(AgentAction(...), '3')]
+
+# Second iteration - agent can see it already called get_text_length
+# The scratchpad includes: "Action: get_text_length\nAction Input: DOG\nObservation: 3\n"
+# So the agent knows the result and can proceed to final answer
+```
+
+#### How It's Used
+
+The `intermediate_steps` are converted to a string format via `format_log_to_str()` and inserted into the prompt as the `agent_scratchpad`:
+
+```python
+agent = {
+    "input": lambda x: x["input"], 
+    "agent_scratchpad": lambda x: format_log_to_str(x["agent_scratchpad"])
+} | prompt | llm | ReActSingleInputOutputParser()
+```
+
+Each iteration, the LLM sees the complete history:
+```
+Question: What is the text length of the string DOG?
+Thought: I should use get_text_length
+Action: get_text_length
+Action Input: DOG
+Observation: 3
+Thought: I now know the final answer
+Final Answer: The text length is 3
+```
+
+Without `intermediate_steps`, the agent would have no memory and might try the same action repeatedly!
 
 ## 🛠️ Customization
 
