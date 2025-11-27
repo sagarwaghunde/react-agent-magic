@@ -6,6 +6,8 @@ A Python implementation of the ReAct (Reasoning + Acting) pattern using LangChai
 
 This project implements a ReAct agent that follows a thought-action-observation loop to answer questions. The agent can use external tools (like calculating text length) and maintains a scratchpad of its reasoning process to arrive at the correct answer.
 
+**Note**: This implementation is based on LangChain, a framework for developing applications powered by language models.
+
 ### What is ReAct?
 
 ReAct (Reasoning + Acting) is a paradigm that combines reasoning traces and task-specific actions in large language models. The agent alternates between:
@@ -126,11 +128,69 @@ while not isinstance(agent_step, AgentFinish):
 
 ### Key Components
 
-1. **Prompt Template**: Structures the agent's reasoning format
+1. **Prompt Template**: Structures the agent's reasoning format ([source template from LangSmith Hub](https://smith.langchain.com/hub/hwchase17/react?organizationId=d924c6d5-9297-4b9b-9cdb-df9eea6b95a7) by [Harrison Chase](https://blog.langchain.com/author/harrison/), creator of LangChain)
 2. **Tools**: Functions the agent can call (e.g., `get_text_length`)
 3. **Output Parser**: Parses LLM output into `AgentAction` or `AgentFinish`
 4. **Scratchpad**: Maintains history of thoughts and observations
 5. **Callback Handler**: Monitors LLM interactions for debugging
+
+### Understanding "Observation" and Stop Tokens
+
+A critical aspect of the ReAct implementation is the use of **stop tokens** to control LLM generation. This prevents the model from hallucinating observations.
+
+#### The Problem: LLM Hallucination
+
+Without stop tokens, the LLM might generate the entire reasoning chain including fake observations:
+
+```
+Thought: I should use get_text_length
+Action: get_text_length
+Action Input: DOG
+Observation: 3          ← LLM might hallucinate this!
+Thought: I now know...
+```
+
+#### The Solution: Stop Tokens
+
+In the LLM configuration, we specify stop tokens:
+
+```python
+llm = ChatOpenAI(
+    temperature=0, 
+    stop=["\nObservation", "Observation"],  # Stop before generating observation
+    callbacks=[MyCallbackHandler()]
+)
+```
+
+**How it works:**
+
+1. **LLM Input** - The prompt includes the format showing all keys: `Thought`, `Action`, `Action Input`, `Observation`, `Final Answer`
+
+2. **LLM Output** - The model generates:
+   ```
+   Thought: I should use get_text_length to determine...
+   Action: get_text_length
+   Action Input: DOG
+   ```
+   Then **stops** when it's about to generate "Observation"
+
+3. **Token Generation Stops** - Once the stop token is detected, no more tokens are decoded
+
+4. **Agent Provides Real Observation** - The agent executor:
+   - Parses the LLM output to extract the action
+   - Executes the actual tool (`get_text_length("DOG")`)
+   - Gets the real result (3)
+   - Appends `Observation: 3` to the scratchpad
+   
+5. **Loop Continues** - The updated scratchpad with the real observation is fed back to the LLM for the next iteration
+
+#### Why This Matters
+
+- **Prevents Hallucination**: The LLM cannot make up tool results
+- **Ensures Accuracy**: Observations come from actual tool execution
+- **Maintains Trust**: The agent only acts on real data, not fabricated results
+
+This mechanism is what makes ReAct agents reliable - they think and plan (LLM), but only observe real results (tool execution).
 
 ## 🛠️ Customization
 
@@ -151,6 +211,8 @@ Then add it to the tools list:
 tools = [get_text_length, your_custom_tool]
 ```
 
+For more information on creating custom tools for agents, see the [LangChain Tools Documentation](https://docs.langchain.com/oss/python/langchain/tools).
+
 ### Modifying the Question
 
 Change the input in the agent invocation:
@@ -168,10 +230,12 @@ Modify the ChatOpenAI initialization:
 llm = ChatOpenAI(
     temperature=0,  # Lower = more deterministic
     model="gpt-4",  # Specify model
-    stop=["\nObservation", "Observation"],
+    stop=["\nObservation", "Observation"],  # Critical: prevents hallucinated observations
     callbacks=[MyCallbackHandler()]
 )
 ```
+
+**Important**: The `stop` parameter is crucial for preventing the LLM from hallucinating observations. See the [Understanding "Observation" and Stop Tokens](#understanding-observation-and-stop-tokens) section for details.
 
 ## 📦 Dependencies
 
@@ -200,8 +264,10 @@ llm = ChatOpenAI()
 ## 📚 Learn More
 
 - [LangChain Documentation](https://python.langchain.com/)
+- [LangChain Tools Documentation](https://docs.langchain.com/oss/python/langchain/tools) - Guide to creating custom tools for agents
 - [ReAct Paper](https://arxiv.org/abs/2210.03629)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
+- [ReAct Prompt Template on LangSmith Hub](https://smith.langchain.com/hub/hwchase17/react?organizationId=d924c6d5-9297-4b9b-9cdb-df9eea6b95a7) - Original prompt template used in this implementation by [Harrison Chase](https://blog.langchain.com/author/harrison/), creator of LangChain
 
 ## 🤝 Contributing
 
