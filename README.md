@@ -255,6 +255,93 @@ Final Answer: The text length is 3
 
 Without `intermediate_steps`, the agent would have no memory and might try the same action repeatedly!
 
+## ⚠️ Limitations and Reliability
+
+While the ReAct pattern is foundational for agentic behavior and AI agents, it's important to understand its limitations.
+
+### Prompt-Based Parsing Fragility
+
+**The Challenge**: This ReAct agent implementation depends heavily on the LLM generating responses in a specific format. The response is parsed using regular expressions in LangChain's `ReActSingleInputOutputParser`.
+
+**The Problem**: 
+- If the LLM generates even **one wrong token**, it can break the entire parsing process
+- The parser expects exact keywords like `Action:`, `Action Input:`, `Thought:`, etc.
+- A small deviation (e.g., `Actions:` instead of `Action:`, or extra whitespace) will cause parsing to fail
+- The LLM might not always follow the format perfectly, especially with:
+  - Complex queries
+  - Less capable models
+  - Higher temperature settings
+  - Ambiguous instructions
+
+**Example of Failure**:
+```
+# Expected format:
+Action: get_text_length
+Action Input: DOG
+
+# What LLM might generate:
+Actions: get_text_length    ← Extra 's' breaks parser!
+Input: DOG                   ← Missing "Action" prefix breaks parser!
+```
+
+### Why This Matters
+
+- **Not Production-Ready Without Safeguards**: Prompt-based agents can be unreliable in production environments
+- **Error Handling Required**: You should wrap agent execution in try-catch blocks
+- **Model Selection Important**: More capable models (like GPT-4) follow instructions better than smaller models
+- **Temperature Matters**: Lower temperature (0-0.3) produces more consistent formatting
+
+### The Solution: Function/Tool Calling
+
+**Function calling (also called tool calling)** is the modern solution to the reliability issues of prompt-based parsing.
+
+#### How Function Calling Solves the Problem
+
+Instead of relying on the LLM to output text in a specific format that gets parsed with regex, function calling:
+
+1. **Structured Output**: The LLM returns a structured JSON object, not free-form text
+2. **No Parsing Errors**: No regex parsing means no formatting errors
+3. **Type Safety**: Function parameters are validated against schemas
+4. **Built-in Support**: Native support from OpenAI, Anthropic, Google, and other LLM providers
+
+#### Example Comparison
+
+**Old Way (Prompt-Based Parsing):**
+```python
+# LLM generates text:
+"Action: get_text_length\nAction Input: DOG"
+# Parser uses regex to extract action and input ❌ Fragile!
+```
+
+**New Way (Function Calling):**
+```python
+# LLM returns structured output:
+{
+  "name": "get_text_length",
+  "arguments": {"text": "DOG"}
+}
+# No parsing needed! ✅ Reliable!
+```
+
+#### Modern Implementation Approaches
+
+1. **OpenAI Function Calling**: Use `tools` parameter with ChatGPT API
+2. **Anthropic Tool Use**: Claude's native tool use capability
+3. **LangChain with Function Calling**: LangChain supports function calling through `.bind_tools()`
+4. **Agent Frameworks**: LangGraph and other frameworks built on function calling
+
+### Recommendation
+
+This implementation serves as an excellent **learning tool** to understand the fundamentals of ReAct agents and how the reasoning loop works. 
+
+**For production use cases**, use function/tool calling instead:
+- ✅ **Reliable**: No parsing errors from malformed text
+- ✅ **Type-safe**: Parameters validated against schemas
+- ✅ **Industry standard**: Used by production AI applications
+- ✅ **Better performance**: More efficient than text parsing
+
+Despite the limitations of prompt-based parsing, understanding the ReAct pattern is crucial as it forms the conceptual foundation for all agent systems, whether they use prompt-based parsing or modern function calling.
+
 ## 🛠️ Customization
 
 ### Adding New Tools
